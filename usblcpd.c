@@ -14,15 +14,17 @@
 #include <linux/init.h>
 #include <linux/slab.h>
 #include <linux/errno.h>
-#include <asm/uaccess.h>
+#include <linux/uaccess.h>
 #include <linux/usb.h>
+#include <linux/wait.h>
+#include <linux/sched/signal.h>
 
 #define DRIVER_VERSION "USBLCPD Driver Version 1.11"
 //the major number of usb is 180
 #define USBLCPD_MINOR		128 //this number should >64 and is multiple of 16
 
-#define IOCTL_GET_HARD_VERSION	1
-#define IOCTL_GET_DRV_VERSION	2
+#define IOCTL_GET_HARD_VERSION	1001
+#define IOCTL_GET_DRV_VERSION	1002
 
 /* stall/wait timeout for USBLCPD */
 #define NAK_TIMEOUT	(10*HZ)
@@ -54,9 +56,9 @@ static struct lcpd_usb_data lcpd_instance;
 //open operation will call this function
 static int open_lcpd(struct inode *inode, struct file *file)
 {
-	info("Enter USBLCPD open_lcpd.");
+	
 	struct lcpd_usb_data *lcpd = &lcpd_instance;
-
+	info("Enter USBLCPD open_lcpd.");
 	if (lcpd->isopen /*|| !lcpd->present*/) {
 		return -EBUSY;
 	}
@@ -102,14 +104,18 @@ ioctl_lcpd(struct file *file, unsigned int cmd, unsigned long arg)
 		i = (lcpd->lcpd_dev)->descriptor.bcdDevice;
 		sprintf(buf,"%1d%1d.%1d%1d",(i & 0xF000)>>12,(i & 0xF00)>>8,
 			(i & 0xF0)>>4,(i & 0xF));
-		if (copy_to_user((void *)arg,buf,strlen(buf))!=0)
+		
+		if (copy_to_user((void __user *)arg,buf,strlen(buf))!=0)
 			return -EFAULT;
 		break;
 	case IOCTL_GET_DRV_VERSION:
-		sprintf(buf,"%s",DRIVER_VERSION);
-		info("IOCTL_GET_DRV_VERSION=%s", buf);
-		if (copy_to_user((void *)arg,buf,strlen(buf))!=0)
-			return -EFAULT;
+		{
+			sprintf(buf,DRIVER_VERSION);
+
+			info("IOCTL_GET_DRV_VERSION=%s", buf);
+			if (copy_to_user((void __user *)arg,buf,strlen(buf))!=0)
+				return -EFAULT;
+		}
 		break;
 	default:
 		return -ENOIOCTLCMD;
@@ -123,11 +129,13 @@ static ssize_t
 write_lcpd(struct file *file, const char *buffer,
 	  size_t count, loff_t * ppos)
 {
+	DEFINE_WAIT(wait);
 	struct lcpd_usb_data *lcpd = &lcpd_instance;
 
 	unsigned long copy_size;
 	unsigned long bytes_written = 0;
 	unsigned int partial;
+	unsigned long timeout = 0;
 
 	int result = 0;
 	int maxretry;
@@ -173,8 +181,9 @@ write_lcpd(struct file *file, const char *buffer,
 				if (!maxretry--) {
 					return -ETIME;
 				}
-				//Linux' Sleep On Wait Queue (interruptible, timeout).
-				interruptible_sleep_on_timeout(&lcpd-> wait_q, NAK_TIMEOUT);
+				prepare_to_wait(&lcpd->wait_q, &wait, TASK_INTERRUPTIBLE);
+				timeout = schedule_timeout(timeout);
+				finish_wait(&lcpd->wait_q, &wait);
 				continue;
 			} else if (!result && partial) {
 				obuf += partial; //set next sending position

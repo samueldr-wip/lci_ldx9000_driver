@@ -17,8 +17,8 @@
 #include <string.h>
 #include <fcntl.h>
 
-#define GET_HARD_VERSION	1
-#define GET_DRV_VERSION		2
+#define GET_HARD_VERSION	1001
+#define GET_DRV_VERSION		1002
 #define DEFAULT_TEXT "0....5...10....5...20....5...30....5..39"
 #define CLR_TEXT "                                        "
 int Command_Set=0;
@@ -84,7 +84,7 @@ int write_pd_default_text(int f)
 int write_pd_text(int f, char* text, int len)
 {
 	printf("Display Text: ");
-	printf(text);
+	printf("%s",text);
 	printf("\n");
 	char buf[128];
 	strncpy(buf, text,len);
@@ -193,7 +193,8 @@ int main(int argc, char *argv[ ])
  // if( (f1=open("/dev/usb/lcpd",O_RDONLY | O_WRONLY))==-1) { //it is for kernel 2.6
     if( (f1=open("/dev/lcpd",O_RDONLY | O_WRONLY))==-1) { //in kernel 3.x, use this name
       fprintf(stderr,"Error opening /dev/usb/lcpd: %s\n",strerror(errno));
-      fprintf(stderr,"Was the drivers loaded ? Does /dev/usb/lcpd exist ?\n");
+ //   fprintf(stderr,"Was the drivers loaded ? Does /dev/usb/lcpd exist ?\n");
+      fprintf(stderr,"Was the drivers loaded ? Does /dev/lcpd exist ?\n");
       return -1;
   };
   printf("Opened the Driver!");
