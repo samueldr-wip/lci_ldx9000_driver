@@ -1,11 +1,70 @@
-   Logic Controls Linux USB PD driver
+﻿Kernel Driver Version 1.11(for kernel 2.6.XX)
+
+Last modified date: 2009-9-14
+
+Tested under Fedora 5 (Kernel:2.6.15-1.2054_FC5smp), Suse 10 (2.6.16.60-0.21-smp), and Xubuntu 8.10 (Kernel:2.6.27-7-generic)
 
 
-1. Unzip LinuxUSBPD.zip to a directory.
-2. Go to that directory and type "install.sh", the PD driver will be installed. 
-3. Connect the USB PD to USB port.
-4. Run testing program by typing "./testlcpd".
-	
+PRE-REQUERIMENTS:
+ - Linux Kernel source files installed on the system
+	Ex: for debian/ubuntu, type "sudo apt-get install linux-source¨.  
+ - development tools installed (gcc)
 
 
-	
+Installation:
+
+
+1. Login as root user
+
+2. Copy "setup" folder to Linux.
+
+3. Modify the permissions of "install.sh" and "testlcpd" by the following command
+   
+   chmod 777 install.sh
+   chmod 777 testlcpd
+
+4. Modify install.sh according to your Linux distribution.
+
+   Type "vi install.sh"
+   
+   Find the line of "AUTO_FILE=/etc/rc.d/rc.local",
+
+   If you use Redhat/Fedora, keep it as it's.
+
+   If you use Suse, modify it to "AUTO_FILE=/etc/rc.d/boot.local"
+
+   If you use Ubuntu/Xubuntu, modify it to "AUTO_FILE=/etc/rc.local"
+
+
+5. Install driver   
+
+   Type "./install.sh".
+
+
+6. Enter the auto-run shell script as step 4, add the following line right after "mknod /dev/usb/lcpd c 180 128" line
+
+   chmod 777 /dev/usb/lcpd
+
+7. In the script as step 4 (for example, rc.local or boot.local), if "exit 0" line exists, please move it to the LAST line!
+
+8. Type "lsmod" to check if "usblcpd" has been loaded into system.
+   
+   lsmod | grep usblcpd
+
+9. Connect PD to USB Port.
+
+10. Test PD
+
+   After installed driver, enter "setup" folder and type "./testlcpd" to see if data on PD.
+
+11. If you want to change USB port in which PD's plugged, please follow the steps below.
+
+     1) Unplug the USB cable of PD.
+  
+     2) Run "rmmod usblcpd" and "rm /dev/usb/lcpd" commands.
+
+     3) Replug in USB cable of PD to another USB port.
+ 
+     4) Run "./install.sh" again under setup folder.
+
+

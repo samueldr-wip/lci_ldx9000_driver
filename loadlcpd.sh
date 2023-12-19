@@ -1,3 +1,3 @@
 #! /bin/bash
-insmod usblcpd.o
+insmod usblcpd.ko
 

@@ -1,11 +1,11 @@
-/***************************************************************************** 
+/*****************************************************************************
  *                          USBlcpd Kernel Driver                             *
  *                            Version 1.00                                   *
  *             (C) 2003 Logic Control, Inc.                  *
  *                                                                           *
  *     This file is licensed under the GPL. See COPYING in the package.      *
- *     10/13/03 created by Wang 
- * 
+ *     10/13/03
+ *
  *****************************************************************************/
 #include <linux/module.h>
 #include <linux/kernel.h>
@@ -15,7 +15,7 @@
 #include <asm/uaccess.h>
 #include <linux/usb.h>
 
-#define DRIVER_VERSION "USBLCPD Driver Version 1.00"
+#define DRIVER_VERSION "USBLCPD Driver Version 1.10"
 //the major number of usb is 180
 #define USBLCPD_MINOR		128 //this number should >64 and is multiple of 16
 
@@ -27,6 +27,12 @@
 
 #define IBUF_SIZE	0x1000
 #define OBUF_SIZE	0x1000 //65,536
+
+
+
+#define warn printk
+#define info printk
+
 
 struct lcpd_usb_data {
 	struct usb_device *lcpd_dev;	/* init: probe_lcpd */
@@ -143,25 +149,27 @@ write_lcpd(struct file *file, const char *buffer,
 			if (signal_pending(current)) {
 				return bytes_written ? bytes_written : -EINTR;
 			}
-		
+
+			//Builds a bulk urb, sends it off and waits for completion
+
 			result = usb_bulk_msg(lcpd->lcpd_dev,
 					 		      usb_sndbulkpipe(lcpd->lcpd_dev, 2), //get send pipe
-					                    obuf, 
-					                    thistime, 
-					                    &partial, 
+					                    obuf,
+					                    thistime,
+					                    &partial,
 					                    10 * HZ); //HZ=100
 
 			dbg("write stats: result:%d thistime:%lu partial:%u",
 			     result, thistime, partial);
 
-			if (result == USB_ST_TIMEOUT) {	/* NAK - so hold for a while */
+			if (result == -ETIMEDOUT) {	/* NAK - so hold for a while */
 				if (!maxretry--) {
 					return -ETIME;
 				}
 				//Linux' Sleep On Wait Queue (interruptible, timeout).
 				interruptible_sleep_on_timeout(&lcpd-> wait_q, NAK_TIMEOUT);
 				continue;
-			} else if (!result & partial) {
+			} else if (!result && partial) {
 				obuf += partial; //set next sending position
 				thistime -= partial; //leaved data length
 			} else //error happened
@@ -179,10 +187,32 @@ write_lcpd(struct file *file, const char *buffer,
 	return bytes_written ? bytes_written : -EIO;
 }
 
-static void *probe_lcpd(struct usb_device *dev, unsigned int ifnum)
+static struct
+file_operations usb_lcpd_fops = {
+	.owner =	THIS_MODULE,
+//	.read =		read_lcpd,
+	.write =	write_lcpd,
+	.ioctl =	ioctl_lcpd,
+	.open =		open_lcpd,
+	.release =	close_lcpd,
+};
+
+static struct usb_class_driver usb_lcpd_class = {
+	.name =		"usb/lcpd%d",
+	.fops =		&usb_lcpd_fops,
+	/*.mode =		S_IFCHR | S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP,*/
+	.minor_base =	USBLCPD_MINOR,
+};
+
+//------------------------------------------------------------------------
+static int probe_lcpd(struct usb_interface *intf, const struct usb_device_id *id)
 {
+	struct usb_device *dev = interface_to_usbdev(intf);
+
+
 	struct lcpd_usb_data *lcpd = &lcpd_instance;
 	int i;
+	int retval;
 	//get device product ID, Product ID (assigned by the manufacturer)
 	//if (dev->descriptor.idProduct != 0xA030  ) {
 	//	warn(KERN_INFO "USBLCPD model not supported.");
@@ -191,7 +221,7 @@ static void *probe_lcpd(struct usb_device *dev, unsigned int ifnum)
 
 	if (lcpd->present == 1) {
 		warn(KERN_INFO "Multiple USBLCPDs are not supported!");
-		return NULL;
+		return -ENODEV;
 	}
 	//Device release number in binary-codeddecimal
 	i = dev->descriptor.bcdDevice;
@@ -205,36 +235,53 @@ static void *probe_lcpd(struct usb_device *dev, unsigned int ifnum)
 	//allocate the memory
 	if (!(lcpd->obuf = (char *) kmalloc(OBUF_SIZE, GFP_KERNEL))) {
 		err("probe_lcpd: Not enough memory for the output buffer");
-		return NULL;
+		return -ENOMEM;
 	}
 	dbg("probe_lcpd: obuf address:%p", lcpd->obuf);
 
 	if (!(lcpd->ibuf = (char *) kmalloc(IBUF_SIZE, GFP_KERNEL))) {
 		err("probe_lcpd: Not enough memory for the input buffer");
 		kfree(lcpd->obuf);
-		return NULL;
+		return -ENOMEM;
 	}
 	dbg("probe_lcpd: ibuf address:%p", lcpd->ibuf);
+	//linux 2.6.11 add
+	retval = usb_register_dev(intf, &usb_lcpd_class);
+	if (retval) {
+		err("Not able to get a minor for this device.");
+		kfree(lcpd->obuf);
+		kfree(lcpd->ibuf);
+		return -ENOMEM;
+	}
 
-	return lcpd;
+	usb_set_intfdata (intf, lcpd);
+
+	return 0;
 }
 //------------------------------------------------------------------------
-static void disconnect_lcpd(struct usb_device *dev, void *ptr)
+static void disconnect_lcpd(struct usb_interface *intf)
 {
-	struct lcpd_usb_data *lcpd = (struct lcpd_usb_data *) ptr;
+	struct lcpd_usb_data *lcpd = usb_get_intfdata (intf);
 
-	if (lcpd->isopen) {
-		lcpd->isopen = 0;
-		/* better let it finish - the release will do whats needed */
-		lcpd->lcpd_dev = NULL;
-		return;
+	//struct lcpd_usb_data *lcpd = (struct lcpd_usb_data *) ptr;
+	usb_set_intfdata (intf, NULL);
+	if (lcpd) {
+		usb_deregister_dev(intf, &usb_lcpd_class);
+
+		if (lcpd->isopen) {
+			lcpd->isopen = 0;
+			/* better let it finish - the release will do whats needed */
+			lcpd->lcpd_dev = NULL;
+			return;
+		}
+		kfree(lcpd->ibuf);
+		kfree(lcpd->obuf);
+
+		info("USBLCPD disconnected.");
+
+		lcpd->present = 0;
 	}
-	kfree(lcpd->ibuf);
-	kfree(lcpd->obuf);
 
-	info("USBLCPD disconnected.");
-
-	lcpd->present = 0;
 }
 /* * @id_table: USB drivers use ID table to support hotplugging.
  *      Export this with MODULE_DEVICE_TABLE(usb,...), or use NULL to
@@ -255,7 +302,16 @@ static void disconnect_lcpd(struct usb_device *dev, void *ptr)
  * them as necessary, and blocking until the unlinks complete).
  */
 
-
+//Logic controls PD:
+// idVendor: 0x0FA8
+// idProduct: 0xA030
+/*
+static struct usb_device_id id_table [] = {
+	{ .idVendor = 0x10D2, .match_flags = USB_DEVICE_ID_MATCH_VENDOR, },
+	{},
+};
+*/
+//=======================================================
 static struct usb_device_id id_table [] = {
 	{USB_DEVICE(0x0FA8,0xA030)},
 	{USB_DEVICE(0x0FA8,0xA060)},
@@ -266,15 +322,6 @@ static struct usb_device_id id_table [] = {
 
 MODULE_DEVICE_TABLE (usb, id_table);
 
-static struct
-file_operations usb_lcpd_fops = {
-	.owner =	THIS_MODULE,
-//	.read =		read_lcpd,
-	.write =	write_lcpd,
-	.ioctl =	ioctl_lcpd,
-	.open =		open_lcpd,
-	.release =	close_lcpd,
-};
 
 static struct
 usb_driver lcpd_driver = {
@@ -282,10 +329,8 @@ usb_driver lcpd_driver = {
 	.probe =	(void *)probe_lcpd,
 	.disconnect =	disconnect_lcpd,
 	.id_table =	id_table,
-	.fops =		&usb_lcpd_fops,
-	.minor =	USBLCPD_MINOR, //self define this minor number
+//	.minor =	USBLCPD_MINOR, //self define this minor number
 };
-
 int usb_lcpd_init(void)
 {
 	if (usb_register(&lcpd_driver) < 0)
