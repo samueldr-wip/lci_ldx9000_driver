@@ -1,0 +1,11 @@
+   Logic Controls Linux USB PD driver
+
+
+1. Unzip LinuxUSBPD.zip to a directory.
+2. Go to that directory and type "install.sh", the PD driver will be installed. 
+3. Connect the USB PD to USB port.
+4. Run testing program by typing "./testlcpd".
+	
+
+
+	
