@@ -190,13 +190,14 @@ int main(int argc, char *argv[ ])
   printf("-----------------------------------------------\n");
 
 
-  if( (f1=open("/dev/usb/lcpd",O_RDONLY | O_WRONLY))==-1) {
+ // if( (f1=open("/dev/usb/lcpd",O_RDONLY | O_WRONLY))==-1) { //it is for kernel 2.6
+    if( (f1=open("/dev/lcpd",O_RDONLY | O_WRONLY))==-1) { //in kernel 3.x, use this name
       fprintf(stderr,"Error opening /dev/usb/lcpd: %s\n",strerror(errno));
       fprintf(stderr,"Was the drivers loaded ? Does /dev/usb/lcpd exist ?\n");
       return -1;
   };
   printf("Opened the Driver!");
-  printf("IO Control:");
+  printf("IO Control:\n");
 
   print_driver_version(f1);
   print_device_version(f1);

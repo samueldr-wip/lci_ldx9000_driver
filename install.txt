@@ -1,8 +1,9 @@
-﻿Kernel Driver Version 1.11(for kernel 2.6.XX)
+﻿Kernel Driver Version 1.11(for kernel 3.X.XX)
+For Ubuntu only
 
-Last modified date: 2009-9-14
+Last modified date: 2013-9-27
 
-Tested under Fedora 5 (Kernel:2.6.15-1.2054_FC5smp), Suse 10 (2.6.16.60-0.21-smp), and Xubuntu 8.10 (Kernel:2.6.27-7-generic)
+Tested under Ubuntu 12.04 
 
 
 PRE-REQUERIMENTS:
@@ -13,7 +14,6 @@ PRE-REQUERIMENTS:
 
 Installation:
 
-
 1. Login as root user
 
 2. Copy "setup" folder to Linux.
@@ -22,42 +22,27 @@ Installation:
    
    chmod 777 install.sh
    chmod 777 testlcpd
+   chmod 777 builddriver.sh
+   chmod 777 loadlcpd.sh
 
-4. Modify install.sh according to your Linux distribution.
-
-   Type "vi install.sh"
-   
-   Find the line of "AUTO_FILE=/etc/rc.d/rc.local",
-
-   If you use Redhat/Fedora, keep it as it's.
-
-   If you use Suse, modify it to "AUTO_FILE=/etc/rc.d/boot.local"
-
-   If you use Ubuntu/Xubuntu, modify it to "AUTO_FILE=/etc/rc.local"
-
-
-5. Install driver   
+4. Install driver   
 
    Type "./install.sh".
 
+Note: If there is any permission issue when you run install.sh, use chmod 777 to give that file permission like step 3 above.
 
-6. Enter the auto-run shell script as step 4, add the following line right after "mknod /dev/usb/lcpd c 180 128" line
 
-   chmod 777 /dev/usb/lcpd
-
-7. In the script as step 4 (for example, rc.local or boot.local), if "exit 0" line exists, please move it to the LAST line!
-
-8. Type "lsmod" to check if "usblcpd" has been loaded into system.
+5. Type "lsmod" to check if "usblcpd" has been loaded into system.
    
    lsmod | grep usblcpd
 
-9. Connect PD to USB Port.
+6. Connect PD to USB Port.
 
-10. Test PD
+7. Test PD
 
    After installed driver, enter "setup" folder and type "./testlcpd" to see if data on PD.
 
-11. If you want to change USB port in which PD's plugged, please follow the steps below.
+8. If you want to change USB port in which PD's plugged, please follow the steps below.
 
      1) Unplug the USB cable of PD.
   

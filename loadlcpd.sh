@@ -1,3 +1,3 @@
 #! /bin/bash
-insmod usblcpd.ko
+sudo modprobe usblcpd
 

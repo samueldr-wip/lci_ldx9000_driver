@@ -16,7 +16,7 @@ fi
 
 echo "Using [include] path: $INCDIR"
 echo "Remove all old files"
-rm -f *.ko
+#rm -f *.ko
 rm -f *.o
 echo "Building Module... "
 make -C $INCDIR SUBDIRS=$PWD modules

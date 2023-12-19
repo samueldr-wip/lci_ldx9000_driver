@@ -21,10 +21,10 @@ fi
 
 echo ""
 echo "Creating /dev entries... "
-mkdir /dev/usb
-if !(mknod /dev/usb/lcpd c 180 128) ; then
-	echo "Failed to create /dev entry"
-fi
+#mkdir /dev/usb
+#if !(mknod /dev/lcpd c 180 128) ; then
+#	echo "Failed to create /dev entry"
+#fi
 
 #if [ -d /lib/modules/`uname -r`/build/include ] ; then
   INCDIR=/lib/modules/`uname -r`/kernel/drivers/usb
@@ -34,19 +34,22 @@ echo "Copy usb pd driver to: $INCDIR"
 #echo -n "."
 cp usblcpd.ko $INCDIR
 cp loadlcpd.sh $INCDIR
+sudo depmod -a
 echo " Done!"
 
-echo "Add PD driver setting file to /etc/rc.d/rc.local."
+echo "Add PD driver setting file to /etc/rc.local."
   
   AUTO_FILE=/etc/rc.local
 
   if !(grep -q loadlcpd.sh $AUTO_FILE) 
   then
-	echo "cd $INCDIR">>$AUTO_FILE
-  	echo "$INCDIR/loadlcpd.sh">>$AUTO_FILE
-	echo "cd -">>$AUTO_FILE
-	echo "mkdir /dev/usb">>$AUTO_FILE
-	echo "mknod /dev/usb/lcpd c 180 128">>$AUTO_FILE
+	sed -i 's/exit 0/#exit 0/' $AUTO_FILE
+	#echo "cd $INCDIR">>$AUTO_FILE
+  	echo "sudo $INCDIR/loadlcpd.sh">>$AUTO_FILE
+	#echo "cd -">>$AUTO_FILE
+	echo "exit 0">>$AUTO_FILE
+	#echo "mkdir /dev/usb">>$AUTO_FILE
+	#echo "mknod /dev/lcpd c 180 128">>$AUTO_FILE
 
   #else
   #	sed -e '/loadlcpd.sh/ c\'$INCDIR'/loadlcpd.sh' $AUTO_FILE >tmp.txt

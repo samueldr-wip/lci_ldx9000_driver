@@ -5,6 +5,8 @@
  *                                                                           *
  *     This file is licensed under the GPL. See COPYING in the package.      *
  *     10/13/03
+ *     1.11: support the linux kernel 3.x
+ *	     Change device to /dev/lcpd
  *
  *****************************************************************************/
 #include <linux/module.h>
@@ -15,7 +17,7 @@
 #include <asm/uaccess.h>
 #include <linux/usb.h>
 
-#define DRIVER_VERSION "USBLCPD Driver Version 1.10"
+#define DRIVER_VERSION "USBLCPD Driver Version 1.11"
 //the major number of usb is 180
 #define USBLCPD_MINOR		128 //this number should >64 and is multiple of 16
 
@@ -28,7 +30,8 @@
 #define IBUF_SIZE	0x1000
 #define OBUF_SIZE	0x1000 //65,536
 
-
+/* Use our own dbg macro */
+//#define dbg_info(dev, format, arg...) do { if (debug) dev_info(dev , format , ## arg); } while (0)
 
 #define warn printk
 #define info printk
@@ -51,6 +54,7 @@ static struct lcpd_usb_data lcpd_instance;
 //open operation will call this function
 static int open_lcpd(struct inode *inode, struct file *file)
 {
+	info("Enter USBLCPD open_lcpd.");
 	struct lcpd_usb_data *lcpd = &lcpd_instance;
 
 	if (lcpd->isopen /*|| !lcpd->present*/) {
@@ -77,14 +81,16 @@ static int close_lcpd(struct inode *inode, struct file *file)
 }
 //------------------------------------------------------------------------
 //
-static int
-ioctl_lcpd(struct inode *inode, struct file *file, unsigned int cmd,
-	  unsigned long arg)
+//static int
+//ioctl_lcpd(struct inode *inode, struct file *file, unsigned int cmd,
+//	  unsigned long arg)
+static long
+ioctl_lcpd(struct file *file, unsigned int cmd, unsigned long arg)
 {
 	struct lcpd_usb_data *lcpd = &lcpd_instance;
 	int i;
-	char buf[30];
-
+	char buf[128];
+	memset(buf,0,128);
 	/* Sanity check to make sure lcpd is connected, powered, etc */
 	if (lcpd == NULL ||
 	    lcpd->present == 0 ||
@@ -100,7 +106,8 @@ ioctl_lcpd(struct inode *inode, struct file *file, unsigned int cmd,
 			return -EFAULT;
 		break;
 	case IOCTL_GET_DRV_VERSION:
-		sprintf(buf,DRIVER_VERSION);
+		sprintf(buf,"%s",DRIVER_VERSION);
+		info("IOCTL_GET_DRV_VERSION=%s", buf);
 		if (copy_to_user((void *)arg,buf,strlen(buf))!=0)
 			return -EFAULT;
 		break;
@@ -159,7 +166,7 @@ write_lcpd(struct file *file, const char *buffer,
 					                    &partial,
 					                    10 * HZ); //HZ=100
 
-			dbg("write stats: result:%d thistime:%lu partial:%u",
+			info("write stats: result:%d thistime:%lu partial:%u",
 			     result, thistime, partial);
 
 			if (result == -ETIMEDOUT) {	/* NAK - so hold for a while */
@@ -176,7 +183,7 @@ write_lcpd(struct file *file, const char *buffer,
 				break;
 		};
 		if (result) {
-			err("Write Whoops - %x", result);
+			info("Write Whoops - %x", result);
 			return -EIO;
 		}
 		bytes_written += copy_size;
@@ -192,13 +199,17 @@ file_operations usb_lcpd_fops = {
 	.owner =	THIS_MODULE,
 //	.read =		read_lcpd,
 	.write =	write_lcpd,
-	.ioctl =	ioctl_lcpd,
+	//.ioctl =	ioctl_lcpd,
+	.unlocked_ioctl =	ioctl_lcpd,
+	//.compat_ioctl =		ioctl_lcpd,
 	.open =		open_lcpd,
 	.release =	close_lcpd,
+	.llseek =	 noop_llseek,
 };
 
 static struct usb_class_driver usb_lcpd_class = {
-	.name =		"usb/lcpd%d",
+	//.name =		"usb/lcpd%d",
+	.name =		"lcpd",
 	.fops =		&usb_lcpd_fops,
 	/*.mode =		S_IFCHR | S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP,*/
 	.minor_base =	USBLCPD_MINOR,
@@ -207,7 +218,7 @@ static struct usb_class_driver usb_lcpd_class = {
 //------------------------------------------------------------------------
 static int probe_lcpd(struct usb_interface *intf, const struct usb_device_id *id)
 {
-	struct usb_device *dev = interface_to_usbdev(intf);
+	struct usb_device *dev = usb_get_dev( interface_to_usbdev(intf));
 
 
 	struct lcpd_usb_data *lcpd = &lcpd_instance;
@@ -234,21 +245,21 @@ static int probe_lcpd(struct usb_interface *intf, const struct usb_device_id *id
 	lcpd->lcpd_dev = dev;
 	//allocate the memory
 	if (!(lcpd->obuf = (char *) kmalloc(OBUF_SIZE, GFP_KERNEL))) {
-		err("probe_lcpd: Not enough memory for the output buffer");
+		info("probe_lcpd: Not enough memory for the output buffer");
 		return -ENOMEM;
 	}
-	dbg("probe_lcpd: obuf address:%p", lcpd->obuf);
+	info("probe_lcpd: obuf address:%p", lcpd->obuf);
 
 	if (!(lcpd->ibuf = (char *) kmalloc(IBUF_SIZE, GFP_KERNEL))) {
-		err("probe_lcpd: Not enough memory for the input buffer");
+		info("probe_lcpd: Not enough memory for the input buffer");
 		kfree(lcpd->obuf);
 		return -ENOMEM;
 	}
-	dbg("probe_lcpd: ibuf address:%p", lcpd->ibuf);
+	info("probe_lcpd: ibuf address:%p", lcpd->ibuf);
 	//linux 2.6.11 add
 	retval = usb_register_dev(intf, &usb_lcpd_class);
 	if (retval) {
-		err("Not able to get a minor for this device.");
+		info("Not able to get a minor for this device.");
 		kfree(lcpd->obuf);
 		kfree(lcpd->ibuf);
 		return -ENOMEM;

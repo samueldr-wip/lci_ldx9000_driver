@@ -16,7 +16,7 @@ obj-m += usblcpd.o
 
 INCLUDE = -I$(KERNELSRC)/include
 
-ifneq ($(KERNELMAJOR), 2.6)
+ifneq ($(KERNELMAJOR), 3.8)
 exit_24:
 endif
 
