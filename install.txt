@@ -1,4 +1,4 @@
-﻿Kernel Driver Version 1.11(for kernel 3.X.XX)
+Kernel Driver Version 1.11(for kernel 3.X.XX)
 For Ubuntu only
 
 Last modified date: 2013-9-27
